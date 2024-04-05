@@ -19,7 +19,7 @@ draw_phrase() {
     for (( k=0; k < ${#phrase}; k++ )); do
         for (( l=k; l < ${#phrase}; l++ )); do
             [[ ${phrase:$l:1} == ' ' ]] && {
-                (( i + l - k >= COLUMNS * 9 / 10 )) && { i="$startX"; ((j++)); }
+                (( i + l - k >= COLUMNS * 9 / 10&& (i=startX, j++) ))
                 lineLen[j]="$i"
                 break
             }
@@ -28,7 +28,7 @@ draw_phrase() {
         char="${phrase:$k:1}" phraseChars["$j;$i"]="$char"
         printf '\e[%d;%dH%c' "$j" "$i" "$char"
 
-        ((i++)); (( i > COLUMNS )) && { i="$startX"; ((j++)); }
+        (( i++, i > COLUMNS&& (i=startX, j++) ))
     done
 
     lineLen[j]="$i"
@@ -36,6 +36,8 @@ draw_phrase() {
 
 trap deinit_term EXIT
 trap 'exit 1' INT
+
+[[ $1 =~ ^--debug$|^-d$ ]]&& DEBUG=1
 
 init_term
 draw_phrase
@@ -45,12 +47,10 @@ i="$startX" j="$startY" k=0 matched=0 startTime="$EPOCHSECONDS"
 printf '\e[%d;%dH' "$j" "$i"
 
 while read -rsN1 char; do
-    [[ $char == $'\n' ]]&& break
-    [[ $1 == '--debug' ]]&& {
-        printf '\e[%dH %s: j=%d i=%d %c' "$LINES" \
-            "${1#--}" "$j" "$i" "${phraseChars[$j;$i]}"
-    }
+    (( DEBUG ))&& printf '\e[%dH DEBUG: j=%d i=%d %c' "$LINES" \
+        "$j" "$i" "${phraseChars[$j;$i]}"
 
+    [[ $char == $'\n' ]]&& break
     case $char in
         ' ')
             if [[ $char == "${phraseChars[$j;$i]}" ]]; then
@@ -69,14 +69,12 @@ while read -rsN1 char; do
             printf '\e[%d;%dH\e[31m%c\e[m\e[A\e[D\e[1;7m%c\e[m\e[B' \
                 "$j" "$i" "$char" "${phraseChars[$j;$i]}"
 
-            [[ ${phraseChars[$j;$i]} == ' ' ]]&& {
-                printf '\e[A\e[D\e[1;7m_\e[m\e[B'
-            }
+            [[ ${phraseChars[$j;$i]} == ' ' ]]&& printf '\e[A\e[D\e[1;7m_\e[m\e[B'
         ;;
     esac
 
-    ((i++)); (( i > lineLen[j] ))&& { i="$startX"; ((j++)); }
-    ((k++)); (( k >= ${#phraseChars[@]} ))&& break
+    (( i++, i > lineLen[j]&& (i=startX, j++) ))
+    (( k++, k >= ${#phraseChars[@]} ))&& break
 done
 
 printf '\e[%dH\e[?25lAccuracy: %s %s%%\nWPM: %s' \
