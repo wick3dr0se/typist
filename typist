@@ -2,9 +2,9 @@
 
 init_term() {
     shopt -s checkwinsize; (:;:)
-    ((startX=(COLUMNS/10) / 2 - ${#phrase} / 2))
+    ((startX=COLUMNS / 10 / 2 - ${#phrase} / 2))
     ((startY=LINES / 2))
-    ((startX=(startX < 0 ? 1 : startX) + COLUMNS/10))
+    ((startX=startX < 0 ? 1 : startX + COLUMNS / 10))
 
     printf '\e[?1049h\e[%d;%dH' "$startY" "$startX"
 }
@@ -19,7 +19,7 @@ draw_phrase() {
     for (( k=0; k < ${#phrase}; k++ )); do
         for (( l=k; l < ${#phrase}; l++ )); do
             [[ ${phrase:$l:1} == ' ' ]] && {
-                (( i + l - k >= COLUMNS - 5 )) && { i="$startX"; ((j++)) }
+                (( i + l - k >= COLUMNS * 9 / 10 )) && { i="$startX"; ((j++)); }
                 lineLen[j]="$i"
                 break
             }
@@ -28,7 +28,7 @@ draw_phrase() {
         char="${phrase:$k:1}" phraseChars["$j;$i"]="$char"
         printf '\e[%d;%dH%c' "$j" "$i" "$char"
 
-        ((i++)); (( i > COLUMNS )) && { i="$startX"; ((j++)) }
+        ((i++)); (( i > COLUMNS )) && { i="$startX"; ((j++)); }
     done
 
     lineLen[j]="$i"
@@ -52,7 +52,6 @@ while read -rsN1 char; do
     }
 
     case $char in
-        $'\x7f') printf '\e[D';;
         ' ')
             if [[ $char == "${phraseChars[$j;$i]}" ]]; then
                 printf '\e[%d;%dH\e[32m_\e[m' "$j" "$i"
@@ -76,13 +75,13 @@ while read -rsN1 char; do
         ;;
     esac
 
-    ((i++)); (( i > lineLen[j] ))&& { i="$startX"; ((j++)) }
+    ((i++)); (( i > lineLen[j] ))&& { i="$startX"; ((j++)); }
     ((k++)); (( k >= ${#phraseChars[@]} ))&& break
 done
 
 printf '\e[%dH\e[?25lAccuracy: %s %s%%\nWPM: %s' \
     "$LINES" "$matched/${#phraseChars[@]}" \
     "$((matched * 100 / ${#phraseChars[@]}))" \
-    "$(((matched / (EPOCHSECONDS - startTime)) * 60 / 5))"
+    "$((matched * 60 / 5 / (EPOCHSECONDS - startTime)))"
 
 until [[ $REPLY =~ [qQ] ]]; do read -rsn1; done
