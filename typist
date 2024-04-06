@@ -19,8 +19,7 @@ draw_phrase() {
     for (( k=0; k < ${#phrase}; k++ )); do
         for (( l=k; l < ${#phrase}; l++ )); do
             [[ ${phrase:$l:1} == ' ' ]] && {
-                (( i + l - k >= COLUMNS * 9 / 10&& (i=startX, j++) ))
-                lineLen[j]="$i"
+                (( i + l - k >= COLUMNS * 9 / 10 && (i=startX, j++), lineLen[j]=i ))
                 break
             }
         done
@@ -28,7 +27,7 @@ draw_phrase() {
         char="${phrase:$k:1}" phraseChars["$j;$i"]="$char"
         printf '\e[%d;%dH%c' "$j" "$i" "$char"
 
-        (( i++, i > COLUMNS&& (i=startX, j++) ))
+        (( i++, i > COLUMNS && (i=startX, j++) ))
     done
 
     lineLen[j]="$i"
@@ -37,21 +36,24 @@ draw_phrase() {
 trap deinit_term EXIT
 trap 'exit 1' INT
 
-[[ $1 =~ ^--debug$|^-d$ ]]&& DEBUG=1
+[[ $1 =~ ^--debug$|^-d$ ]] && DEBUG=1
 
 init_term
 draw_phrase
 
 i="$startX" j="$startY" k=0 matched=0 startTime="$EPOCHSECONDS"
-
 printf '\e[%d;%dH' "$j" "$i"
 
 while read -rsN1 char; do
-    (( DEBUG ))&& printf '\e[%dH DEBUG: j=%d i=%d %c' "$LINES" \
+    (( DEBUG )) && printf '\e[%dH DEBUG: j=%d i=%d %c' "$LINES" \
         "$j" "$i" "${phraseChars[$j;$i]}"
 
     [[ $char == $'\n' ]]&& break
     case $char in
+        $'\x7f')
+            (( i <= startX? j <= startY|| (j--, i=lineLen[j]) : i--, k--, matched--))
+            printf '\e[%d;%dH%c\e[D' "$j" "$i" "${phraseChars[$j;$i]}"
+        ;;
         ' ')
             if [[ $char == "${phraseChars[$j;$i]}" ]]; then
                 printf '\e[%d;%dH\e[32m_\e[m' "$j" "$i"
@@ -59,22 +61,23 @@ while read -rsN1 char; do
                 printf '\e[%d;%dH\e[31m_\e[m\e[A\e[D\e[1;7m%c\e[m\e[B' \
                     "$j" "$i" "${phraseChars[$j;$i]}"
             fi
-            ((matched++))
+            ((i++, k++, matched++))
         ;;
         "${phraseChars[$j;$i]}")
             printf '\e[%d;%dH\e[32m%c\e[m' "$j" "$i" "$char"
-            ((matched++))
+            ((i++, k++, matched++))
         ;;
         *)
             printf '\e[%d;%dH\e[31m%c\e[m\e[A\e[D\e[1;7m%c\e[m\e[B' \
                 "$j" "$i" "$char" "${phraseChars[$j;$i]}"
 
-            [[ ${phraseChars[$j;$i]} == ' ' ]]&& printf '\e[A\e[D\e[1;7m_\e[m\e[B'
+            [[ ${phraseChars[$j;$i]} == ' ' ]] && printf '\e[A\e[D\e[1;7m_\e[m\e[B'
+            ((i++, k++))
         ;;
     esac
 
-    (( i++, i > lineLen[j]&& (i=startX, j++) ))
-    (( k++, k >= ${#phraseChars[@]} ))&& break
+    (( i > lineLen[j] && (i=startX, j++) ))
+    (( k >= ${#phraseChars[@]} )) && break
 done
 
 printf '\e[%dH\e[?25lAccuracy: %s %s%%\nWPM: %s' \
