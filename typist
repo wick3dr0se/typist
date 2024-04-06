@@ -6,13 +6,16 @@ init_term() {
     ((startY=LINES / 2))
     ((startX=startX < 0 ? 1 : startX + COLUMNS / 10))
 
-    printf '\e[?1049h\e[%d;%dH' "$startY" "$startX"
+    printf '\e[?1049h\e[2J\e[?25h\e[%d;%dH' "$startY" "$startX"
 }
 
 deinit_term() { printf '\e[?1049l\e[?25h'; }
 
 draw_phrase() {
+    unset phrase phraseChars
+
     mapfile -t <phrases.txt
+
     local i="$startX" j="$startY" phrase="${MAPFILE[SRANDOM%${#MAPFILE[@]}]}"
     local -gA phraseChars
     
@@ -38,51 +41,56 @@ trap 'exit 1' INT
 
 [[ $1 =~ ^--debug$|^-d$ ]] && DEBUG=1
 
-init_term
-draw_phrase
+main() {
+    init_term; draw_phrase
 
-i="$startX" j="$startY" k=0 matched=0 startTime="$EPOCHSECONDS"
-printf '\e[%d;%dH' "$j" "$i"
+    local i="$startX" j="$startY" k=0 matched=0 startTime="$EPOCHSECONDS"
+    printf '\e[%d;%dH' "$j" "$i"
 
-while read -rsN1 char; do
-    (( DEBUG )) && printf '\e[%dH DEBUG: j=%d i=%d %c' "$LINES" \
-        "$j" "$i" "${phraseChars[$j;$i]}"
+    while read -rsN1 char; do
+        (( DEBUG )) && printf '\e[%dHDEBUG: j=%d i=%d k=%d m=%d' \
+            "$LINES" "$j" "$i" "$k" "$matched"
 
-    [[ $char == $'\n' ]]&& break
-    case $char in
-        $'\x7f')
-            (( i <= startX? j <= startY|| (j--, i=lineLen[j]) : i--, k--, matched--))
-            printf '\e[%d;%dH%c\e[D' "$j" "$i" "${phraseChars[$j;$i]}"
-        ;;
-        ' ')
-            if [[ $char == "${phraseChars[$j;$i]}" ]]; then
-                printf '\e[%d;%dH\e[32m_\e[m' "$j" "$i"
-            else
-                printf '\e[%d;%dH\e[31m_\e[m\e[A\e[D\e[1;7m%c\e[m\e[B' \
-                    "$j" "$i" "${phraseChars[$j;$i]}"
-            fi
-            ((i++, k++, matched++))
-        ;;
-        "${phraseChars[$j;$i]}")
-            printf '\e[%d;%dH\e[32m%c\e[m' "$j" "$i" "$char"
-            ((i++, k++, matched++))
-        ;;
-        *)
-            printf '\e[%d;%dH\e[31m%c\e[m\e[A\e[D\e[1;7m%c\e[m\e[B' \
-                "$j" "$i" "$char" "${phraseChars[$j;$i]}"
+        [[ $char == $'\n' ]]&& break
+        case $char in
+            $'\x7f')
+                (( i <= startX ? j <= startY || (j--, i=lineLen[j]) :
+                    (i--, k--, (matched && matched--)) ))
+                
+                printf '\e[%d;%dH%c\e[D' "$j" "$i" "${phraseChars[$j;$i]}"
+            ;;
+            ' ')
+                if [[ $char == "${phraseChars[$j;$i]}" ]]; then
+                    printf '\e[%d;%dH\e[32m_\e[m' "$j" "$i"
+                else
+                    printf '\e[%d;%dH\e[31m_\e[m\e[A\e[D\e[1;7m%c\e[m\e[B' \
+                        "$j" "$i" "${phraseChars[$j;$i]}"
+                fi
+                ((i++, k++, matched++))
+            ;;
+            "${phraseChars[$j;$i]}")
+                printf '\e[%d;%dH\e[32m%c\e[m' "$j" "$i" "$char"
+                ((i++, k++, matched++))
+            ;;
+            [aA-zZ]|[0-9])
+                printf '\e[%d;%dH\e[31m%c\e[m\e[A\e[D\e[1;7m%c\e[m\e[B' \
+                    "$j" "$i" "$char" "${phraseChars[$j;$i]}"
 
-            [[ ${phraseChars[$j;$i]} == ' ' ]] && printf '\e[A\e[D\e[1;7m_\e[m\e[B'
-            ((i++, k++))
-        ;;
-    esac
+                [[ ${phraseChars[$j;$i]} == ' ' ]] && printf '\e[A\e[D\e[1;7m_\e[m\e[B'
+                ((i++, k++))
+            ;;
+        esac
 
-    (( i > lineLen[j] && (i=startX, j++) ))
-    (( k >= ${#phraseChars[@]} )) && break
+        (( i > lineLen[j] && (i=startX, j++) ))
+        (( k >= ${#phraseChars[@]} )) && break
+    done
+
+    printf '\e[%dH\e[2K\e[?25lAccuracy: %s %s%%\nWPM: %s' \
+        "$LINES" "$matched/${#phraseChars[@]}" \
+        "$((matched * 100 / ${#phraseChars[@]}))" \
+        "$((matched * 60 / 5 / (EPOCHSECONDS - startTime)))"
+}; main
+
+while read -rsn1; do
+    case $REPLY in [qQ]) break;; [rR]) main;; esac
 done
-
-printf '\e[%dH\e[?25lAccuracy: %s %s%%\nWPM: %s' \
-    "$LINES" "$matched/${#phraseChars[@]}" \
-    "$((matched * 100 / ${#phraseChars[@]}))" \
-    "$((matched * 60 / 5 / (EPOCHSECONDS - startTime)))"
-
-until [[ $REPLY =~ [qQ] ]]; do read -rsn1; done
