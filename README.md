@@ -21,3 +21,7 @@ Download
 
 ## Usage
 Type as fast as you can
+
+## Controls
+- Q|q|Ctrl+C - Quit
+- R|r - Retry
